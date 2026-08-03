@@ -155,3 +155,64 @@ carried forward on assumption.
 Virtualization.framework will not boot a guest newer than its host, so macOS 27
 cannot be made to draw glass on a macOS 26 machine. That mattered only while the
 constants were unknown; they are now known to be unchanged.
+
+## UI layer — nav bars, toolbars, controls
+
+The material alone is not a nav bar. These are the pieces around it.
+
+### Scroll edge effect
+
+`scroll_edge.glsl`, ported from QuartzCore's `variable_blur_frag` — the
+primitive behind `NSScrollEdgeEffectStyle` / `scrollEdgeEffectThreshold`.
+Content scrolling under a bar is progressively blurred toward the edge, so the
+bar materialises out of the content rather than sitting on it as a hard rect.
+
+Three things the disassembly settles:
+
+- **The radius is mask-driven, not geometric.** A second texture's `.a` is
+  saturated and scaled. One shader therefore serves top/bottom/left/right edges
+  and any custom falloff — the ramp is painted, not computed.
+- **The mip idiom is the same one the glass uses**: `radius*0.5 + 1.0`, `log2`,
+  explicit LOD. Apple reuses a single blur primitive system-wide.
+- **The kernel is a 4-tap box at that LOD** (`* 0.25`), repeated for a second
+  offset row — a separable cross over the mip chain, not a wide gaussian. The
+  mip already did the work.
+
+`uStyle` picks ramp (soft) versus step (hard), which is the whole visible
+difference between the `NSScrollEdgeEffectStyle` cases.
+
+### Vibrancy roles
+
+`VIBRANCY` / `VibrancyRoles` carry the six content-tint matrices extracted
+verbatim from Apple's `platformFill{Light,Dark}.visualstyleset`:
+`primary, secondary, tertiary, quaternary, separator, highlight`.
+
+Light `primary` maps mid-grey to **0.250**; dark `primary` to **0.750**. Tinting
+labels and glyphs with flat black or white instead of these is the usual reason
+content on glass looks subtly wrong.
+
+### Concentric radii
+
+`concentricRadius(outer, inset)` — nested glass
+(`NSContainerConcentricGlassEffectView`) needs `outer - inset`, not the parent's
+radius. Reusing the outer radius makes the gap between curves non-uniform and
+the corners read as pinched.
+
+### Group splitting
+
+`splitGroups(rects, spacing)` mirrors
+`NSGlassEffectContainerViewAutomaticallySplitsGroups`: elements closer than
+`spacing` merge into one glass body, beyond it they stay separate. Lets a
+container decide how many SDF unions to run instead of merging unconditionally.
+
+### Press state
+
+`pressState(t)` returns a squish scale plus specular and blur boosts. Kept
+subtle on purpose — past roughly 4% the squish reads as a bounce rather than a
+press.
+
+### Still missing
+
+Motion-linked specular (iOS tilts the highlight with the device) is not
+implemented; it needs a live attitude source rather than anything decodable from
+the shader.
