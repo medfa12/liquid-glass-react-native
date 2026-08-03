@@ -20,7 +20,7 @@ export function defaultParams(): GlassParams {
     exponent: 6.5,
 
     // The lobes must have OPPOSITE signs. Matching signs give you a lens;
-    innerRefractAmount: 8,
+    innerRefractAmount: 4,
     innerRefractInvHeight: 1 / 18,
     outerRefractAmount: -13,
     outerRefractInvHeight: 1 / 10,
@@ -36,7 +36,7 @@ export function defaultParams(): GlassParams {
     aberrationAngle: [1, 0],
 
     // FITTED: effective gaussian sigma ~8 (radius ~16). The material recipe
-    blurRadius: 22,
+    blurRadius: 28,
     blurDist: [0, 8, 20, 40],
     blurAlpha: [1, 0.6, 0.3, 0],
 
@@ -113,6 +113,10 @@ export function defaultParams(): GlassParams {
     // Pixel-denominated params were fitted at a 240x150 panel, so
     // min(halfSize) = 75. Everything in pixels scales from here.
     scaleRef: 75,
+    adaptiveAmount: 0.6,
+    luminanceValues: [0.8, 0.9, 1.1, 0.825],
+    adaptiveTintDark: 0.12,
+    adaptiveTintLight: 0.95,
   };
 }
 

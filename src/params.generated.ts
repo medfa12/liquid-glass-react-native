@@ -1,8 +1,8 @@
 // Generated from portable/liquid_glass_params.h (SPIR-V reflection).
 // std140 offsets are exact. Do not reorder.
 
-export const PARAM_BYTES = 560;
-export const PARAM_FLOATS = 140;
+export const PARAM_BYTES = 592;
+export const PARAM_FLOATS = 148;
 
 export interface GlassParams {
   halfSize: [number, number];
@@ -81,6 +81,10 @@ export interface GlassParams {
   blurFillDarkenOpacity: number;
   blurFillNormalOpacity: number;
   scaleRef: number;
+  adaptiveAmount: number;
+  luminanceValues: [number, number, number, number];
+  adaptiveTintDark: number;
+  adaptiveTintLight: number;
 }
 
 export const OFFSETS: Record<string, number> = {
@@ -160,6 +164,10 @@ export const OFFSETS: Record<string, number> = {
   blurFillDarkenOpacity: 540,
   blurFillNormalOpacity: 544,
   scaleRef: 548,
+  adaptiveAmount: 552,
+  luminanceValues: 560,
+  adaptiveTintDark: 576,
+  adaptiveTintLight: 580,
 };
 
 export function packParams(p: GlassParams, out: Float32Array): Float32Array {
@@ -296,5 +304,49 @@ export function packParams(p: GlassParams, out: Float32Array): Float32Array {
   out[135] = p.blurFillDarkenOpacity;
   out[136] = p.blurFillNormalOpacity;
   out[137] = p.scaleRef;
+  out[138] = p.adaptiveAmount;
+  out[140] = p.luminanceValues[0];
+  out[141] = p.luminanceValues[1];
+  out[142] = p.luminanceValues[2];
+  out[143] = p.luminanceValues[3];
+  out[144] = p.adaptiveTintDark;
+  out[145] = p.adaptiveTintLight;
   return out;
+}
+
+/** Rec.709 luma, decoded from Apple's tile_average_luma. */
+export const LUMA709: [number, number, number] = [0.212646, 0.715332, 0.072205];
+
+/**
+ * luminanceColorMap.png as a closed form: logistic k=10.25 centred at 0.5,
+ * output 0.349..0.800. Fit to 1.4/255.
+ */
+export function adaptiveLumaCurve(L: number): number {
+  const k = 10.25, mid = 0.5;
+  const t = 1 / (1 + Math.exp(-k * (L - mid)));
+  const t0 = 1 / (1 + Math.exp(k * mid));
+  const t1 = 1 / (1 + Math.exp(-k * (1 - mid)));
+  const n = Math.min(Math.max((t - t0) / Math.max(t1 - t0, 1e-4), 0), 1);
+  return 0.349 + (0.8 - 0.349) * n;
+}
+
+/**
+ * Content luma to use for symbols and labels over this backdrop: dark over a
+ * bright backdrop, light over a dark one. The flip lands at backdrop 0.5,
+ * which is where Apple centred the curve.
+ */
+export function adaptiveContentLuma(avgLuma: number, dark = 0.12, light = 0.95): number {
+  const c = adaptiveLumaCurve(avgLuma);
+  const s = Math.min(Math.max((c - 0.35) / 0.3, 0), 1);
+  return light + (dark - light) * (s * s * (3 - 2 * s));
+}
+
+/** Average Rec.709 luma of an image, for driving the two helpers above. */
+export function averageLuma(src: HTMLCanvasElement | HTMLImageElement): number {
+  const c = document.createElement('canvas');
+  c.width = 1; c.height = 1;
+  const ctx = c.getContext('2d')!;
+  ctx.drawImage(src as CanvasImageSource, 0, 0, 1, 1);
+  const d = ctx.getImageData(0, 0, 1, 1).data;
+  return (d[0] * LUMA709[0] + d[1] * LUMA709[1] + d[2] * LUMA709[2]) / 255;
 }

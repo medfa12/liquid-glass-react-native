@@ -83,6 +83,10 @@ struct GlassParams
     float uBlurFillDarkenOpacity;
     float uBlurFillNormalOpacity;
     float uScaleRef;
+    float uAdaptiveAmount;
+    float4 uLuminanceValues;
+    float uAdaptiveTintDark;
+    float uAdaptiveTintLight;
 };
 
 struct main0_out

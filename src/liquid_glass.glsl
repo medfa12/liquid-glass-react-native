@@ -229,7 +229,29 @@ BIND(1) uniform GlassParams {
 // every such parameter scales with the element. 0 disables scaling.
  float uScaleRef;
 
+// ---- adaptive tint / chameleon --------------------------------------------
+// Apple's CAChameleonLayer samples the backdrop's average luminance and shifts
+// the material — and the content on it — so it stays legible. The measurement
+// is a GPU reduction (tile_average_luma -> compute_sum_luma ->
+// compute_average_luma) using EXACTLY Rec.709 weights; the result is remapped
+// through luminanceColorMap.png, a 256-entry curve that is a logistic centred
+// at 0.5 with k=10.25 running 0.349 -> 0.800 (fit to 1.4/255).
+//
+// We get the average for free by sampling the top mip instead of running a
+// separate reduction pass.
+ float uAdaptiveAmount;    // luminanceAmount: 0 = off, 1 = full chameleon
+ vec4  uLuminanceValues;   // per-recipe control points (Apple ships 4)
+ float uAdaptiveTintDark;  // content luma to use over a BRIGHT backdrop
+ float uAdaptiveTintLight; // content luma to use over a DARK backdrop
+
 };
+
+// Rec.709 luma. Decoded verbatim from tile_average_luma's fp16 immediates
+// (0xH32CE, 0xH39B9, 0xH2C9F) — matches Rec.709 to 0.0002.
+const vec3  LUMA709 = vec3(0.212646, 0.715332, 0.072205);
+
+// luminanceColorMap.png as a closed form.
+const float LUM_LO = 0.3490, LUM_HI = 0.8000, LUM_K = 10.25, LUM_MID = 0.5;
 
 const float EPS    = 1.0e-4;   // Apple: 0x3F1A36E2E0000000
 const float TINY   = 1.0e-6;   // Apple: 0x3EB0C6F7A0000000
@@ -296,6 +318,34 @@ void smoothUnion(float d1, vec2 n1, float d2, vec2 n2, float k,
     float h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
     d = mix(d2, d1, h) - k * h * (1.0 - h);
     n = normalize(mix(n2, n1, h) + vec2(EPS, 0.0));
+}
+
+// Average backdrop luminance, taken from the top mip so no reduction pass is
+// needed. Requires a complete mip chain (already required for the blur).
+float backdropAverageLuma(sampler2D tex) {
+    // textureQueryLevels() needs GLSL 430; derive the top level from the base
+    // size instead so this compiles on GL 330 and ES 300 too.
+    vec2 sz = vec2(textureSize(tex, 0));
+    float top = floor(log2(max(sz.x, sz.y)));
+    return dot(textureLod(tex, vec2(0.5), top).rgb, LUMA709);
+}
+
+// luminanceColorMap.png, closed form.
+float adaptiveLumaCurve(float L) {
+    float t = 1.0 / (1.0 + exp(-LUM_K * (L - LUM_MID)));
+    // renormalise the logistic's finite range at the clamp points
+    float t0 = 1.0 / (1.0 + exp(LUM_K * LUM_MID));
+    float t1 = 1.0 / (1.0 + exp(-LUM_K * (1.0 - LUM_MID)));
+    t = clamp((t - t0) / max(t1 - t0, EPS), 0.0, 1.0);
+    return LUM_LO + (LUM_HI - LUM_LO) * t;
+}
+
+// The content luma this glass wants: dark symbols over a bright backdrop,
+// light symbols over a dark one. Apps read the same curve on the CPU to tint
+// their own labels and glyphs — see adaptiveContentLuma() in each package.
+float adaptiveContentLuma(float avgLuma) {
+    return mix(uAdaptiveTintLight, uAdaptiveTintDark,
+               smoothstep(0.35, 0.65, adaptiveLumaCurve(avgLuma)));
 }
 
 // One-pixel analytic antialiasing. Resolution independent, no AA texture, no
