@@ -1,0 +1,40 @@
+{
+  "name": "@liquid-glass/react-native",
+  "version": "0.1.0",
+  "description": "Liquid Glass for React Native — native Metal (iOS) and GLES3 (Android) refraction, from reverse-engineered macOS 26/27 QuartzCore shaders.",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "react-native": "src/index.tsx",
+  "source": "src/index.tsx",
+  "files": [
+    "src",
+    "lib",
+    "ios",
+    "android",
+    "liquid-glass.podspec",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=17",
+    "react-native": ">=0.70"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "react-native": "^0.73.11",
+    "typescript": "5.4"
+  },
+  "keywords": [
+    "react-native",
+    "liquid-glass",
+    "metal",
+    "opengl",
+    "shader",
+    "ios",
+    "android"
+  ]
+}
