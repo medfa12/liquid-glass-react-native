@@ -1,11 +1,5 @@
-/**
- * Liquid Glass parameters + std140 packing.
- *
- * GENERATED from portable/liquid_glass_params.h, itself generated from
- * SPIR-V reflection of the shader. Offsets are EXACT.
- *
- * Do not hand-reorder. A std140 mismatch compiles fine and renders garbage.
- */
+// Generated from portable/liquid_glass_params.h (SPIR-V reflection).
+// std140 offsets are exact. Do not reorder.
 
 export const PARAM_BYTES = 560;
 export const PARAM_FLOATS = 140;
@@ -86,9 +80,9 @@ export interface GlassParams {
   blurFillLightenOpacity: number;
   blurFillDarkenOpacity: number;
   blurFillNormalOpacity: number;
+  scaleRef: number;
 }
 
-/** Byte offsets, straight from the reflection. */
 export const OFFSETS: Record<string, number> = {
   halfSize: 0,
   exponent: 8,
@@ -165,6 +159,7 @@ export const OFFSETS: Record<string, number> = {
   blurFillLightenOpacity: 536,
   blurFillDarkenOpacity: 540,
   blurFillNormalOpacity: 544,
+  scaleRef: 548,
 };
 
 export function packParams(p: GlassParams, out: Float32Array): Float32Array {
@@ -300,5 +295,6 @@ export function packParams(p: GlassParams, out: Float32Array): Float32Array {
   out[134] = p.blurFillLightenOpacity;
   out[135] = p.blurFillDarkenOpacity;
   out[136] = p.blurFillNormalOpacity;
+  out[137] = p.scaleRef;
   return out;
 }

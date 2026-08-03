@@ -223,6 +223,12 @@ BIND(1) uniform GlassParams {
  float uBlurFillDarkenOpacity;
  float uBlurFillNormalOpacity;
 
+// Reference half-extent the pixel-denominated parameters were tuned at.
+// Distances below are in PIXELS, so a preset fitted on a 240x150 panel is wrong
+// on a 480x300 one. Set this to min(halfSize) of the geometry you tuned at and
+// every such parameter scales with the element. 0 disables scaling.
+ float uScaleRef;
+
 };
 
 const float EPS    = 1.0e-4;   // Apple: 0x3F1A36E2E0000000
@@ -346,7 +352,7 @@ vec4 sampleBackdrop(vec2 uv, float radius)
 
 // Piecewise-linear remap of distance through the 4 blur control points,
 // producing an effective blur radius.
-float blurRampRadius(float dist, float blurScale)
+float blurRampRadius(float dist, float blurScale, float uScaleFactor)
 {
     vec3 lo   = uBlurDist.yzw;
     vec3 hi   = vec3(uBlurDist.x, uBlurDist.y, uBlurDist.z);
@@ -357,7 +363,7 @@ float blurRampRadius(float dist, float blurScale)
     vec3 inv   = 1.0 / mix(span, vec3(TINY), degen);
     vec3 t    = clamp((vec3(dist) - lo) * inv, 0.0, 1.0);
     vec3 w    = uBlurAlpha.yzw * t;
-    return (uBlurAlpha.x - (w.x + w.y + w.z)) * uBlurRadius * blurScale;
+    return (uBlurAlpha.x - (w.x + w.y + w.z)) * uBlurRadius * blurScale * uScaleFactor;
 }
 
 // =============================================================================
@@ -405,7 +411,7 @@ float shadowFalloff(float d, float invRadius)
 //
 //  3. Contributions below epsilon are discarded, not blended.
 // =============================================================================
-float glassHighlight(float dist, vec2 normal)
+float glassHighlight(float dist, vec2 normal, float S)
 {
     float t = clamp(dist / max(uHighlightHeight, TINY), 0.0, 1.0);
 
@@ -551,6 +557,11 @@ void main()
     // Pixels -> normalized UV. Every displacement below is authored in pixels.
     vec2 texel = 1.0 / vec2(textureSize(uBackdrop, 0));
 
+    // Scale pixel-denominated parameters to this element's size.
+    float S = (uScaleRef > 0.0)
+            ? min(uHalfSize.x, uHalfSize.y) / uScaleRef
+            : 1.0;
+
     float dist;
     vec2  normal;
     supercircleSDF(vUV, animHalf, uExponent, dist, normal);
@@ -579,18 +590,18 @@ void main()
                      dot(rot, uDisplacementMat.zw));
 
     // ---- inner lobe -------------------------------------------------------
-    float innerMag  = refractLobe(dist, uInnerRefractAmount * dRefract, uInnerRefractInvHeight, 0.0);
+    float innerMag  = refractLobe(dist, uInnerRefractAmount * dRefract * S, uInnerRefractInvHeight / S, 0.0);
     float innerDist = innerMag + dist;
     vec2  innerUV   = vBackdropUV + innerMag * disp * texel;
-    float faceLod   = blurRampRadius(innerDist, dBlur);
+    float faceLod   = blurRampRadius(innerDist, dBlur, S);
     vec4  faceCol   = sampleBackdrop(innerUV, faceLod);
 
     // ---- outer lobe (the two-sided part) ----------------------------------
     if (uRefractOpacity > 0.0 && uComplexRefraction > 0.5) {
-        float outerMag  = refractLobe(dist, uOuterRefractAmount * dRefract, uOuterRefractInvHeight, 0.0);
+        float outerMag  = refractLobe(dist, uOuterRefractAmount * dRefract * S, uOuterRefractInvHeight / S, 0.0);
         float outerDist = outerMag + dist;
         vec2  outerUV   = vBackdropUV + outerMag * disp * texel;
-        vec4  outerCol  = sampleBackdrop(outerUV, blurRampRadius(outerDist, dBlur));
+        vec4  outerCol  = sampleBackdrop(outerUV, blurRampRadius(outerDist, dBlur, S));
 
         // EXACT: the blend is not flat. It ramps across [threshold0, threshold1]
         // in distance, then scales by refraction_opacity. A constant mix() puts
@@ -667,9 +678,9 @@ void main()
     vec3 bleed = vec3(0.0);
     float bleedMask = 0.0;
     if (uEdgeBleedAmount > 0.0) {
-        float bt = clamp((-dist) * uEdgeBleedInvHeight, 0.0, 1.0);
-        float bmag = uEdgeBleedAmount - lensCurve(bt) * uEdgeBleedAmount;
-        vec4 bcol = sampleBackdrop(vBackdropUV + bmag * disp * texel, uEdgeBleedBlurRadius);
+        float bt = clamp((-dist) * (uEdgeBleedInvHeight / S), 0.0, 1.0);
+        float bmag = (uEdgeBleedAmount - lensCurve(bt) * uEdgeBleedAmount) * S;
+        vec4 bcol = sampleBackdrop(vBackdropUV + bmag * disp * texel, uEdgeBleedBlurRadius * S);
         bleed = gradeUnpremultiplied(bcol, uBleedCM0, uBleedCM1, uBleedCM2);
         bleed = bleed * uBleedDarken.x + vec3(uBleedDarken.y);
 
@@ -677,7 +688,7 @@ void main()
         // plain smoothstep saturates to 1 in the BODY and 0 at the rim — the
         // exact opposite of an edge bleed. Un-inverted, it washes the whole
         // element with the wide rim blur instead of hugging the edge.
-        float band = 1.0 - smoothstep(uEdgeBleedDist.x, uEdgeBleedDist.y, -dist);
+        float band = 1.0 - smoothstep(uEdgeBleedDist.x * S, uEdgeBleedDist.y * S, -dist);
         bleedMask  = band * uEdgeBleedOpacity;
     }
 
@@ -696,7 +707,7 @@ void main()
         // Gated to OUTSIDE the shape. A drop shadow falls on what is behind the
         // element, not through its face; without step(0.0, dist) the falloff
         // saturates across the whole interior and darkens the body uniformly.
-        shadowMask = shadowFalloff(dist, uShadowInvRadius)
+        shadowMask = shadowFalloff(dist, uShadowInvRadius / S)
                    * uShadowOpacity * step(0.0, dist);
     }
 
@@ -745,7 +756,7 @@ void main()
     // Added, not blended — a glint is emissive, so it should blow past the
     // face rather than replace it.
     if (uHighlightIntensity > 0.0) {
-        rgb += vec3(glassHighlight(-dist, normal));
+        rgb += vec3(glassHighlight(-dist, normal, S));
     }
 
     // ---- macOS 27: ring shadow --------------------------------------------
@@ -776,7 +787,7 @@ void main()
     // Premultiplied by nothing and added on top: emissive, so it must not be
     // attenuated by coverage. Fitted gain/falloff — see the uniform block.
     if (uRimGlintGain > 0.0) {
-        float glint = exp(-abs(dist) / max(uRimGlintTau, EPS))
+        float glint = exp(-abs(dist) / max(uRimGlintTau * S, EPS))
                     * step(dist, 2.0) * dBody;
         rgb += vec3(glint * uRimGlintGain / max(coverage, 0.25));
     }

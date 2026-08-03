@@ -82,6 +82,7 @@ struct GlassParams
     float uBlurFillLightenOpacity;
     float uBlurFillDarkenOpacity;
     float uBlurFillNormalOpacity;
+    float uScaleRef;
 };
 
 struct main0_out
@@ -140,36 +141,36 @@ float refractLobe(thread const float& dist, thread const float& amount, thread c
 {
     float t = fast::clamp(((-dist) - offset) * invHeight, 0.0, 1.0);
     float param = t;
-    float _241 = lensCurve(param);
-    return amount - (_241 * amount);
+    float _244 = lensCurve(param);
+    return amount - (_244 * amount);
 }
 
 static inline __attribute__((always_inline))
-float blurRampRadius(thread const float& dist, thread const float& blurScale, constant GlassParams& _281)
+float blurRampRadius(thread const float& dist, thread const float& blurScale, thread const float& uScaleFactor, constant GlassParams& _284)
 {
-    float3 lo = _281.uBlurDist.yzw;
-    float3 hi = float3(_281.uBlurDist.x, _281.uBlurDist.y, _281.uBlurDist.z);
+    float3 lo = _284.uBlurDist.yzw;
+    float3 hi = float3(_284.uBlurDist.x, _284.uBlurDist.y, _284.uBlurDist.z);
     float3 span = hi - lo;
     float3 degen = step(abs(span), float3(9.9999999747524270787835121154785e-07));
     float3 inv = float3(1.0) / mix(span, float3(9.9999999747524270787835121154785e-07), degen);
     float3 t = fast::clamp((float3(dist) - lo) * inv, float3(0.0), float3(1.0));
-    float3 w = _281.uBlurAlpha.yzw * t;
-    return ((_281.uBlurAlpha.x - ((w.x + w.y) + w.z)) * _281.uBlurRadius) * blurScale;
+    float3 w = _284.uBlurAlpha.yzw * t;
+    return (((_284.uBlurAlpha.x - ((w.x + w.y) + w.z)) * _284.uBlurRadius) * blurScale) * uScaleFactor;
 }
 
 static inline __attribute__((always_inline))
 float blurLOD(thread const float& radius)
 {
-    float _251;
+    float _254;
     if (radius < 2.0)
     {
-        _251 = (radius * 0.5) + 1.0;
+        _254 = (radius * 0.5) + 1.0;
     }
     else
     {
-        _251 = radius;
+        _254 = radius;
     }
-    float r = _251;
+    float r = _254;
     return fast::max(0.0, log2(fast::max(r, 9.9999999747524270787835121154785e-07)));
 }
 
@@ -203,64 +204,64 @@ float shadowFalloff(thread const float& d, thread const float& invRadius)
 }
 
 static inline __attribute__((always_inline))
-float3 blurFill(thread const float3& base, thread const float3& fill, constant GlassParams& _281)
+float3 blurFill(thread const float3& base, thread const float3& fill, constant GlassParams& _284)
 {
     float3 lighten = fast::max(base, fill);
     float3 darken = fast::min(base, fill);
-    float wBase = (1.0 - _281.uBlurFillLightenOpacity) - _281.uBlurFillDarkenOpacity;
-    float3 mixed = ((lighten * _281.uBlurFillLightenOpacity) + (darken * _281.uBlurFillDarkenOpacity)) + (base * wBase);
-    return mix(mixed, fill, float3(fast::clamp(_281.uBlurFillNormalOpacity, 0.0, 1.0)));
+    float wBase = (1.0 - _284.uBlurFillLightenOpacity) - _284.uBlurFillDarkenOpacity;
+    float3 mixed = ((lighten * _284.uBlurFillLightenOpacity) + (darken * _284.uBlurFillDarkenOpacity)) + (base * wBase);
+    return mix(mixed, fill, float3(fast::clamp(_284.uBlurFillNormalOpacity, 0.0, 1.0)));
 }
 
 static inline __attribute__((always_inline))
-float keyFillHighlight(thread const float2& normal, thread const float& heightMask, constant GlassParams& _281)
+float keyFillHighlight(thread const float2& normal, thread const float& heightMask, constant GlassParams& _284)
 {
-    float spread = fast::clamp(_281.uKeyFillSpread, 0.0, 0.999000012874603271484375);
+    float spread = fast::clamp(_284.uKeyFillSpread, 0.0, 0.999000012874603271484375);
     float invS = 1.0 / fast::max(1.0 - spread, 9.9999999747524270787835121154785e-07);
-    float nl = dot(_281.uKeyFillDir, normal);
+    float nl = dot(_284.uKeyFillDir, normal);
     float2 lobes = fast::clamp((float2(nl, -nl) - float2(spread)) * invS, float2(0.0), float2(1.0)) * heightMask;
-    float2 curved = lobes / fast::max(((float2(1.0) - lobes) * _281.uKeyFillAmount) + float2(1.0), float2(9.9999999747524270787835121154785e-07));
+    float2 curved = lobes / fast::max(((float2(1.0) - lobes) * _284.uKeyFillAmount) + float2(1.0), float2(9.9999999747524270787835121154785e-07));
     return curved.x + curved.y;
 }
 
 static inline __attribute__((always_inline))
-float glassHighlight(thread const float& dist, thread const float2& normal, constant GlassParams& _281)
+float glassHighlight(thread const float& dist, thread const float2& normal, thread const float& S, constant GlassParams& _284)
 {
-    float t = fast::clamp(dist / fast::max(_281.uHighlightHeight, 9.9999999747524270787835121154785e-07), 0.0, 1.0);
+    float t = fast::clamp(dist / fast::max(_284.uHighlightHeight, 9.9999999747524270787835121154785e-07), 0.0, 1.0);
     float hard = float(t < 1.0);
-    float band = mix(hard, 1.0 - t, fast::clamp(_281.uHighlightSoftness, 0.0, 1.0));
+    float band = mix(hard, 1.0 - t, fast::clamp(_284.uHighlightSoftness, 0.0, 1.0));
     float w = fast::max(fwidth(dist), 9.9999997473787516355514526367188e-05);
     float inner = fast::clamp((dist / w) + 0.5, 0.0, 1.0);
-    float outer = fast::clamp(((_281.uHighlightHeight - dist) / w) + 0.5, 0.0, 1.0);
+    float outer = fast::clamp(((_284.uHighlightHeight - dist) / w) + 0.5, 0.0, 1.0);
     float mask = (inner * band) * outer;
-    float ndotl = dot(_281.uLightDir, normal);
-    float spec = fast::clamp((ndotl - _281.uHighlightThreshold) / fast::max(1.0 - _281.uHighlightThreshold, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-    float _457;
+    float ndotl = dot(_284.uLightDir, normal);
+    float spec = fast::clamp((ndotl - _284.uHighlightThreshold) / fast::max(1.0 - _284.uHighlightThreshold, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+    float _462;
     if (dist < (-5.0))
     {
-        _457 = 0.0;
+        _462 = 0.0;
     }
     else
     {
-        _457 = mask * spec;
+        _462 = mask * spec;
     }
-    float v = _457;
-    return v * _281.uHighlightIntensity;
+    float v = _462;
+    return v * _284.uHighlightIntensity;
 }
 
 static inline __attribute__((always_inline))
-float ringShadow(thread const float& dist, constant GlassParams& _281)
+float ringShadow(thread const float& dist, constant GlassParams& _284)
 {
-    float invR = 1.0 / fast::max(_281.uRingShadowRadius, 9.9999999747524270787835121154785e-07);
+    float invR = 1.0 / fast::max(_284.uRingShadowRadius, 9.9999999747524270787835121154785e-07);
     float inner = dist * invR;
-    float outer = inner + (_281.uRingShadowStrokeWidth * invR);
+    float outer = inner + (_284.uRingShadowStrokeWidth * invR);
     float param = inner * 0.707106769084930419921875;
     float param_1 = 1.0;
     float a = shadowFalloff(param, param_1);
     float param_2 = outer * 0.707106769084930419921875;
     float param_3 = 1.0;
     float b = shadowFalloff(param_2, param_3);
-    return fast::clamp(a - b, 0.0, 1.0) * _281.uRingShadowOpacity;
+    return fast::clamp(a - b, 0.0, 1.0) * _284.uRingShadowOpacity;
 }
 
 static inline __attribute__((always_inline))
@@ -270,10 +271,10 @@ float aaStep(thread const float& x)
     return fast::clamp((x / w) + 0.5, 0.0, 1.0);
 }
 
-fragment main0_out main0(main0_in in [[stage_in]], constant GlassParams& _281 [[buffer(0)]], texture2d<float> uBackdrop [[texture(0)]], sampler uBackdropSmplr [[sampler(0)]])
+fragment main0_out main0(main0_in in [[stage_in]], constant GlassParams& _284 [[buffer(0)]], texture2d<float> uBackdrop [[texture(0)]], sampler uBackdropSmplr [[sampler(0)]])
 {
     main0_out out = {};
-    float d01 = fast::clamp(_281.uDiffusion, 0.0, 1.0);
+    float d01 = fast::clamp(_284.uDiffusion, 0.0, 1.0);
     if (d01 <= 0.0)
     {
         discard_fragment();
@@ -289,19 +290,29 @@ fragment main0_out main0(main0_in in [[stage_in]], constant GlassParams& _281 [[
     float dBody = diffusionCurve(param_4, param_5);
     float param_6 = d01;
     float param_7 = 0.800000011920928955078125;
-    float2 animHalf = _281.uHalfSize * mix(0.959999978542327880859375, 1.0, diffusionCurve(param_6, param_7));
+    float2 animHalf = _284.uHalfSize * mix(0.959999978542327880859375, 1.0, diffusionCurve(param_6, param_7));
     float2 texel = float2(1.0) / float2(int2(uBackdrop.get_width(), uBackdrop.get_height()));
+    float _710;
+    if (_284.uScaleRef > 0.0)
+    {
+        _710 = fast::min(_284.uHalfSize.x, _284.uHalfSize.y) / _284.uScaleRef;
+    }
+    else
+    {
+        _710 = 1.0;
+    }
+    float S = _710;
     float2 param_8 = in.vUV;
     float2 param_9 = animHalf;
-    float param_10 = _281.uExponent;
+    float param_10 = _284.uExponent;
     float param_11;
     float2 param_12;
     supercircleSDF(param_8, param_9, param_10, param_11, param_12);
     float dist = param_11;
     float2 normal = param_12;
-    int extras = int(fast::clamp(_281.uExtraCount, 0.0, 3.0));
-    float4 _743;
-    float4 _752;
+    int extras = int(fast::clamp(_284.uExtraCount, 0.0, 3.0));
+    float4 _766;
+    float4 _775;
     float param_16;
     float2 param_17;
     float param_23;
@@ -314,24 +325,24 @@ fragment main0_out main0(main0_in in [[stage_in]], constant GlassParams& _281 [[
         }
         if (i == 0)
         {
-            _743 = _281.uShape2;
+            _766 = _284.uShape2;
         }
         else
         {
             if (i == 1)
             {
-                _752 = _281.uShape3;
+                _775 = _284.uShape3;
             }
             else
             {
-                _752 = _281.uShape4;
+                _775 = _284.uShape4;
             }
-            _743 = _752;
+            _766 = _775;
         }
-        float4 sh = _743;
+        float4 sh = _766;
         float2 param_13 = in.vUV - sh.xy;
         float2 param_14 = sh.zw * mix(0.959999978542327880859375, 1.0, d01);
-        float param_15 = _281.uExponent;
+        float param_15 = _284.uExponent;
         supercircleSDF(param_13, param_14, param_15, param_16, param_17);
         float d2 = param_16;
         float2 n2 = param_17;
@@ -339,72 +350,74 @@ fragment main0_out main0(main0_in in [[stage_in]], constant GlassParams& _281 [[
         float2 param_19 = normal;
         float param_20 = d2;
         float2 param_21 = n2;
-        float param_22 = _281.uMergeK;
+        float param_22 = _284.uMergeK;
         smoothUnion(param_18, param_19, param_20, param_21, param_22, param_23, param_24);
         dist = param_23;
         normal = param_24;
     }
-    float2 rot = float2(dot(normal, float2(_281.uRefractAngle.x, -_281.uRefractAngle.y)), dot(normal, float2(_281.uRefractAngle.y, _281.uRefractAngle.x)));
-    float2 disp = float2(dot(rot, _281.uDisplacementMat.xy), dot(rot, _281.uDisplacementMat.zw));
+    float2 rot = float2(dot(normal, float2(_284.uRefractAngle.x, -_284.uRefractAngle.y)), dot(normal, float2(_284.uRefractAngle.y, _284.uRefractAngle.x)));
+    float2 disp = float2(dot(rot, _284.uDisplacementMat.xy), dot(rot, _284.uDisplacementMat.zw));
     float param_25 = dist;
-    float param_26 = _281.uInnerRefractAmount * dRefract;
-    float param_27 = _281.uInnerRefractInvHeight;
+    float param_26 = (_284.uInnerRefractAmount * dRefract) * S;
+    float param_27 = _284.uInnerRefractInvHeight / S;
     float param_28 = 0.0;
     float innerMag = refractLobe(param_25, param_26, param_27, param_28);
     float innerDist = innerMag + dist;
     float2 innerUV = in.vBackdropUV + ((disp * innerMag) * texel);
     float param_29 = innerDist;
     float param_30 = dBlur;
-    float faceLod = blurRampRadius(param_29, param_30, _281);
-    float2 param_31 = innerUV;
-    float param_32 = faceLod;
-    float4 faceCol = sampleBackdrop(param_31, param_32, uBackdrop, uBackdropSmplr);
-    bool _877 = _281.uRefractOpacity > 0.0;
-    bool _884;
-    if (_877)
+    float param_31 = S;
+    float faceLod = blurRampRadius(param_29, param_30, param_31, _284);
+    float2 param_32 = innerUV;
+    float param_33 = faceLod;
+    float4 faceCol = sampleBackdrop(param_32, param_33, uBackdrop, uBackdropSmplr);
+    bool _906 = _284.uRefractOpacity > 0.0;
+    bool _913;
+    if (_906)
     {
-        _884 = _281.uComplexRefraction > 0.5;
+        _913 = _284.uComplexRefraction > 0.5;
     }
     else
     {
-        _884 = _877;
+        _913 = _906;
     }
-    if (_884)
+    if (_913)
     {
-        float param_33 = dist;
-        float param_34 = _281.uOuterRefractAmount * dRefract;
-        float param_35 = _281.uOuterRefractInvHeight;
-        float param_36 = 0.0;
-        float outerMag = refractLobe(param_33, param_34, param_35, param_36);
+        float param_34 = dist;
+        float param_35 = (_284.uOuterRefractAmount * dRefract) * S;
+        float param_36 = _284.uOuterRefractInvHeight / S;
+        float param_37 = 0.0;
+        float outerMag = refractLobe(param_34, param_35, param_36, param_37);
         float outerDist = outerMag + dist;
         float2 outerUV = in.vBackdropUV + ((disp * outerMag) * texel);
-        float param_37 = outerDist;
-        float param_38 = dBlur;
-        float2 param_39 = outerUV;
-        float param_40 = blurRampRadius(param_37, param_38, _281);
-        float4 outerCol = sampleBackdrop(param_39, param_40, uBackdrop, uBackdropSmplr);
-        float span = _281.uRefractThreshold.y - _281.uRefractThreshold.x;
-        float t = fast::clamp((dist - _281.uRefractThreshold.x) / ((abs(span) < 9.9999999747524270787835121154785e-07) ? 9.9999999747524270787835121154785e-07 : span), 0.0, 1.0);
-        faceCol = mix(faceCol, outerCol, float4(t * _281.uRefractOpacity));
+        float param_38 = outerDist;
+        float param_39 = dBlur;
+        float param_40 = S;
+        float2 param_41 = outerUV;
+        float param_42 = blurRampRadius(param_38, param_39, param_40, _284);
+        float4 outerCol = sampleBackdrop(param_41, param_42, uBackdrop, uBackdropSmplr);
+        float span = _284.uRefractThreshold.y - _284.uRefractThreshold.x;
+        float t = fast::clamp((dist - _284.uRefractThreshold.x) / ((abs(span) < 9.9999999747524270787835121154785e-07) ? 9.9999999747524270787835121154785e-07 : span), 0.0, 1.0);
+        faceCol = mix(faceCol, outerCol, float4(t * _284.uRefractOpacity));
     }
     float aberrAlpha = 1.0;
-    if (_281.uAberrationAmount > 0.0)
+    if (_284.uAberrationAmount > 0.0)
     {
-        float2 rotA = float2(dot(normal, float2(_281.uAberrationAngle.x, -_281.uAberrationAngle.y)), dot(normal, float2(_281.uAberrationAngle.y, _281.uAberrationAngle.x)));
-        float2 dispA = float2(dot(rotA, _281.uDisplacementMat.zw), dot(rotA, _281.uDisplacementMat.xy));
-        float param_41 = dist;
-        float param_42 = _281.uAberrationAmount;
-        float param_43 = _281.uAberrationInvHeight;
-        float param_44 = _281.uAberrationOffset;
-        float2 offA = dispA * refractLobe(param_41, param_42, param_43, param_44);
+        float2 rotA = float2(dot(normal, float2(_284.uAberrationAngle.x, -_284.uAberrationAngle.y)), dot(normal, float2(_284.uAberrationAngle.y, _284.uAberrationAngle.x)));
+        float2 dispA = float2(dot(rotA, _284.uDisplacementMat.zw), dot(rotA, _284.uDisplacementMat.xy));
+        float param_43 = dist;
+        float param_44 = _284.uAberrationAmount;
+        float param_45 = _284.uAberrationInvHeight;
+        float param_46 = _284.uAberrationOffset;
+        float2 offA = dispA * refractLobe(param_43, param_44, param_45, param_46);
         float3 acc = float3(0.0);
         float aSum = 0.0;
         float w = 1.0;
         for (int i_1 = 0; i_1 < 3; i_1++)
         {
-            float2 param_45 = innerUV + ((offA * w) * texel);
-            float param_46 = faceLod;
-            float4 s = sampleBackdrop(param_45, param_46, uBackdrop, uBackdropSmplr);
+            float2 param_47 = innerUV + ((offA * w) * texel);
+            float param_48 = faceLod;
+            float4 s = sampleBackdrop(param_47, param_48, uBackdrop, uBackdropSmplr);
             float a = fast::max(s.w, 9.9999999747524270787835121154785e-07);
             acc.x += ((s.x / a) * w);
             acc.y += ((s.y / a) * (1.0 - w));
@@ -414,9 +427,9 @@ fragment main0_out main0(main0_in in [[stage_in]], constant GlassParams& _281 [[
         float sstep = 0.0;
         for (int i_2 = 0; i_2 < 4; i_2++)
         {
-            float2 param_47 = innerUV - ((offA * sstep) * texel);
-            float param_48 = faceLod;
-            float4 s_1 = sampleBackdrop(param_47, param_48, uBackdrop, uBackdropSmplr);
+            float2 param_49 = innerUV - ((offA * sstep) * texel);
+            float param_50 = faceLod;
+            float4 s_1 = sampleBackdrop(param_49, param_50, uBackdrop, uBackdropSmplr);
             float a_1 = fast::max(s_1.w, 9.9999999747524270787835121154785e-07);
             acc.y += ((s_1.y / a_1) * (1.0 - sstep));
             acc.z += ((s_1.z / a_1) * sstep);
@@ -427,130 +440,131 @@ fragment main0_out main0(main0_in in [[stage_in]], constant GlassParams& _281 [[
         aberrAlpha = aSum * 0.14285714924335479736328125;
         faceCol = float4(acc, aberrAlpha);
     }
-    float4 param_49 = faceCol;
-    float4 param_50 = _281.uFaceCM0;
-    float4 param_51 = _281.uFaceCM1;
-    float4 param_52 = _281.uFaceCM2;
-    float3 face = gradeUnpremultiplied(param_49, param_50, param_51, param_52) * (_281.uFaceOpacity * dBody);
+    float4 param_51 = faceCol;
+    float4 param_52 = _284.uFaceCM0;
+    float4 param_53 = _284.uFaceCM1;
+    float4 param_54 = _284.uFaceCM2;
+    float3 face = gradeUnpremultiplied(param_51, param_52, param_53, param_54) * (_284.uFaceOpacity * dBody);
     float3 bleed = float3(0.0);
     float bleedMask = 0.0;
-    if (_281.uEdgeBleedAmount > 0.0)
+    if (_284.uEdgeBleedAmount > 0.0)
     {
-        float bt = fast::clamp((-dist) * _281.uEdgeBleedInvHeight, 0.0, 1.0);
-        float param_53 = bt;
-        float _1172 = lensCurve(param_53);
-        float bmag = _281.uEdgeBleedAmount - (_1172 * _281.uEdgeBleedAmount);
-        float2 param_54 = in.vBackdropUV + ((disp * bmag) * texel);
-        float param_55 = _281.uEdgeBleedBlurRadius;
-        float4 bcol = sampleBackdrop(param_54, param_55, uBackdrop, uBackdropSmplr);
-        float4 param_56 = bcol;
-        float4 param_57 = _281.uBleedCM0;
-        float4 param_58 = _281.uBleedCM1;
-        float4 param_59 = _281.uBleedCM2;
-        bleed = gradeUnpremultiplied(param_56, param_57, param_58, param_59);
-        bleed = (bleed * _281.uBleedDarken.x) + float3(_281.uBleedDarken.y);
-        float band = 1.0 - smoothstep(_281.uEdgeBleedDist.x, _281.uEdgeBleedDist.y, -dist);
-        bleedMask = band * _281.uEdgeBleedOpacity;
+        float bt = fast::clamp((-dist) * (_284.uEdgeBleedInvHeight / S), 0.0, 1.0);
+        float param_55 = bt;
+        float _1209 = lensCurve(param_55);
+        float bmag = (_284.uEdgeBleedAmount - (_1209 * _284.uEdgeBleedAmount)) * S;
+        float2 param_56 = in.vBackdropUV + ((disp * bmag) * texel);
+        float param_57 = _284.uEdgeBleedBlurRadius * S;
+        float4 bcol = sampleBackdrop(param_56, param_57, uBackdrop, uBackdropSmplr);
+        float4 param_58 = bcol;
+        float4 param_59 = _284.uBleedCM0;
+        float4 param_60 = _284.uBleedCM1;
+        float4 param_61 = _284.uBleedCM2;
+        bleed = gradeUnpremultiplied(param_58, param_59, param_60, param_61);
+        bleed = (bleed * _284.uBleedDarken.x) + float3(_284.uBleedDarken.y);
+        float band = 1.0 - smoothstep(_284.uEdgeBleedDist.x * S, _284.uEdgeBleedDist.y * S, -dist);
+        bleedMask = band * _284.uEdgeBleedOpacity;
     }
     float3 shadow = float3(0.0);
     float shadowMask = 0.0;
-    if (_281.uShadowContribution > 9.9999999747524270787835121154785e-07)
+    if (_284.uShadowContribution > 9.9999999747524270787835121154785e-07)
     {
-        float param_60 = dist;
-        float param_61 = _281.uShadowAmount;
-        float param_62 = _281.uShadowInvHeight;
-        float param_63 = _281.uShadowDistOffset;
-        float smag = refractLobe(param_60, param_61, param_62, param_63);
-        float2 suv = in.vBackdropUV + (((disp * smag) + _281.uShadowOffset) * texel);
-        float2 param_64 = suv;
-        float param_65 = _281.uShadowAmount;
-        float4 scol = sampleBackdrop(param_64, param_65, uBackdrop, uBackdropSmplr);
-        float4 param_66 = scol;
-        float4 param_67 = _281.uShadowCM0;
-        float4 param_68 = _281.uShadowCM1;
-        float4 param_69 = _281.uShadowCM2;
-        shadow = gradeUnpremultiplied(param_66, param_67, param_68, param_69) * _281.uShadowContribution;
-        float param_70 = dist;
-        float param_71 = _281.uShadowInvRadius;
-        shadowMask = (shadowFalloff(param_70, param_71) * _281.uShadowOpacity) * step(0.0, dist);
+        float param_62 = dist;
+        float param_63 = _284.uShadowAmount;
+        float param_64 = _284.uShadowInvHeight;
+        float param_65 = _284.uShadowDistOffset;
+        float smag = refractLobe(param_62, param_63, param_64, param_65);
+        float2 suv = in.vBackdropUV + (((disp * smag) + _284.uShadowOffset) * texel);
+        float2 param_66 = suv;
+        float param_67 = _284.uShadowAmount;
+        float4 scol = sampleBackdrop(param_66, param_67, uBackdrop, uBackdropSmplr);
+        float4 param_68 = scol;
+        float4 param_69 = _284.uShadowCM0;
+        float4 param_70 = _284.uShadowCM1;
+        float4 param_71 = _284.uShadowCM2;
+        shadow = gradeUnpremultiplied(param_68, param_69, param_70, param_71) * _284.uShadowContribution;
+        float param_72 = dist;
+        float param_73 = _284.uShadowInvRadius / S;
+        shadowMask = (shadowFalloff(param_72, param_73) * _284.uShadowOpacity) * step(0.0, dist);
     }
     float3 rgb = mix(face, bleed, float3(bleedMask));
     rgb = mix(rgb, shadow, float3(shadowMask));
-    if (_281.uClampLimit > 0.0)
+    if (_284.uClampLimit > 0.0)
     {
-        float peak = fast::max(fast::max(rgb.x, rgb.y), rgb.z) / fast::max(_281.uSDRWhite * _281.uEDRScale, 9.9999999747524270787835121154785e-07);
-        if (peak > _281.uClampLimit)
+        float peak = fast::max(fast::max(rgb.x, rgb.y), rgb.z) / fast::max(_284.uSDRWhite * _284.uEDRScale, 9.9999999747524270787835121154785e-07);
+        if (peak > _284.uClampLimit)
         {
-            float k = _281.uClampLimit / peak;
-            rgb = mix(fast::min(rgb, float3(_281.uClampLimit)), rgb * k, float3(_281.uPreserveHue));
+            float k = _284.uClampLimit / peak;
+            rgb = mix(fast::min(rgb, float3(_284.uClampLimit)), rgb * k, float3(_284.uPreserveHue));
         }
     }
-    bool _1366 = _281.uBlurFillNormalOpacity > 0.0;
-    bool _1373;
-    if (!_1366)
+    bool _1413 = _284.uBlurFillNormalOpacity > 0.0;
+    bool _1420;
+    if (!_1413)
     {
-        _1373 = _281.uBlurFillLightenOpacity > 0.0;
+        _1420 = _284.uBlurFillLightenOpacity > 0.0;
     }
     else
     {
-        _1373 = _1366;
+        _1420 = _1413;
     }
-    bool _1380;
-    if (!_1373)
+    bool _1427;
+    if (!_1420)
     {
-        _1380 = _281.uBlurFillDarkenOpacity > 0.0;
+        _1427 = _284.uBlurFillDarkenOpacity > 0.0;
     }
     else
     {
-        _1380 = _1373;
+        _1427 = _1420;
     }
-    if (_1380)
+    if (_1427)
     {
-        float2 param_72 = in.vBackdropUV;
-        float param_73 = _281.uBlurFillBlurRadius;
-        float4 fillSample = sampleBackdrop(param_72, param_73, uBackdrop, uBackdropSmplr);
-        float4 param_74 = fillSample;
-        float4 param_75 = _281.uFaceCM0;
-        float4 param_76 = _281.uFaceCM1;
-        float4 param_77 = _281.uFaceCM2;
-        float3 fill = gradeUnpremultiplied(param_74, param_75, param_76, param_77);
-        float3 param_78 = rgb;
-        float3 param_79 = fill;
-        rgb = blurFill(param_78, param_79, _281);
+        float2 param_74 = in.vBackdropUV;
+        float param_75 = _284.uBlurFillBlurRadius;
+        float4 fillSample = sampleBackdrop(param_74, param_75, uBackdrop, uBackdropSmplr);
+        float4 param_76 = fillSample;
+        float4 param_77 = _284.uFaceCM0;
+        float4 param_78 = _284.uFaceCM1;
+        float4 param_79 = _284.uFaceCM2;
+        float3 fill = gradeUnpremultiplied(param_76, param_77, param_78, param_79);
+        float3 param_80 = rgb;
+        float3 param_81 = fill;
+        rgb = blurFill(param_80, param_81, _284);
     }
-    if (_281.uKeyFillAmount > 0.0)
+    if (_284.uKeyFillAmount > 0.0)
     {
-        float hMask = fast::clamp(((-dist) - _281.uKeyFillEffectOffset) / fast::max(_281.uKeyFillHeight, 9.9999999747524270787835121154785e-07), 0.0, 1.0);
-        float2 param_80 = normal;
-        float param_81 = hMask;
-        float key = keyFillHighlight(param_80, param_81, _281);
-        rgb += (float3(key) * mix(1.0, 0.5, fast::clamp(_281.uKeyFillColorBias, 0.0, 1.0)));
+        float hMask = fast::clamp(((-dist) - _284.uKeyFillEffectOffset) / fast::max(_284.uKeyFillHeight, 9.9999999747524270787835121154785e-07), 0.0, 1.0);
+        float2 param_82 = normal;
+        float param_83 = hMask;
+        float key = keyFillHighlight(param_82, param_83, _284);
+        rgb += (float3(key) * mix(1.0, 0.5, fast::clamp(_284.uKeyFillColorBias, 0.0, 1.0)));
     }
-    if (_281.uHighlightIntensity > 0.0)
+    if (_284.uHighlightIntensity > 0.0)
     {
-        float param_82 = -dist;
-        float2 param_83 = normal;
-        rgb += float3(glassHighlight(param_82, param_83, _281));
+        float param_84 = -dist;
+        float2 param_85 = normal;
+        float param_86 = S;
+        rgb += float3(glassHighlight(param_84, param_85, param_86, _284));
     }
-    if (_281.uRingShadowOpacity > 0.0)
+    if (_284.uRingShadowOpacity > 0.0)
     {
-        float param_84 = (-dist) - _281.uRingShadowOffset.x;
-        float ring = ringShadow(param_84, _281) * fast::clamp(_281.uRingShadowMask, 0.0, 1.0);
+        float param_87 = (-dist) - _284.uRingShadowOffset.x;
+        float ring = ringShadow(param_87, _284) * fast::clamp(_284.uRingShadowMask, 0.0, 1.0);
         rgb *= (1.0 - ring);
     }
-    float edgeSpan = _281.uEdgeRange.y - _281.uEdgeRange.x;
-    float edgeT = fast::clamp((dist - _281.uEdgeRange.x) / ((abs(edgeSpan) < 9.9999999747524270787835121154785e-07) ? 9.9999999747524270787835121154785e-07 : edgeSpan), 0.0, 1.0);
-    float edgeFade = 1.0 - mix(_281.uEdgeOpacity.x, _281.uEdgeOpacity.y, edgeT);
-    float param_85 = -dist;
-    float coverage = (aaStep(param_85) * edgeFade) * dBody;
+    float edgeSpan = _284.uEdgeRange.y - _284.uEdgeRange.x;
+    float edgeT = fast::clamp((dist - _284.uEdgeRange.x) / ((abs(edgeSpan) < 9.9999999747524270787835121154785e-07) ? 9.9999999747524270787835121154785e-07 : edgeSpan), 0.0, 1.0);
+    float edgeFade = 1.0 - mix(_284.uEdgeOpacity.x, _284.uEdgeOpacity.y, edgeT);
+    float param_88 = -dist;
+    float coverage = (aaStep(param_88) * edgeFade) * dBody;
     if (coverage < 9.9999999747524270787835121154785e-07)
     {
         discard_fragment();
     }
-    if (_281.uRimGlintGain > 0.0)
+    if (_284.uRimGlintGain > 0.0)
     {
-        float glint = (exp((-abs(dist)) / fast::max(_281.uRimGlintTau, 9.9999997473787516355514526367188e-05)) * step(dist, 2.0)) * dBody;
-        rgb += float3((glint * _281.uRimGlintGain) / fast::max(coverage, 0.25));
+        float glint = (exp((-abs(dist)) / fast::max(_284.uRimGlintTau * S, 9.9999997473787516355514526367188e-05)) * step(dist, 2.0)) * dBody;
+        rgb += float3((glint * _284.uRimGlintGain) / fast::max(coverage, 0.25));
     }
     out.fragColor = float4(rgb, coverage);
     return out;

@@ -20,31 +20,31 @@ export function defaultParams(): GlassParams {
     exponent: 6.5,
 
     // The lobes must have OPPOSITE signs. Matching signs give you a lens;
-    innerRefractAmount: 12,
+    innerRefractAmount: 8,
     innerRefractInvHeight: 1 / 18,
-    outerRefractAmount: -6,
+    outerRefractAmount: -13,
     outerRefractInvHeight: 1 / 10,
-    refractOpacity: 0.6,
+    refractOpacity: 0.65,
     complexRefraction: 1,
     refractThreshold: [-30, 0],
     displacementMat: [1, 0, 0, 1],
     refractAngle: [1, 0],
 
-    aberrationAmount: 2.5,
+    aberrationAmount: 3,
     aberrationInvHeight: 1 / 14,
     aberrationOffset: 0,
     aberrationAngle: [1, 0],
 
     // FITTED: effective gaussian sigma ~8 (radius ~16). The material recipe
-    blurRadius: 12,
+    blurRadius: 22,
     blurDist: [0, 8, 20, 40],
     blurAlpha: [1, 0.6, 0.3, 0],
 
-    edgeBleedAmount: 8,
+    edgeBleedAmount: 24,
     edgeBleedInvHeight: 1 / 12,
     edgeBleedBlurRadius: 32,
     edgeBleedDist: [0, 14],
-    edgeBleedOpacity: 0.45,
+    edgeBleedOpacity: 0.15,
     bleedDarken: [0.92, 0],
 
     edgeRange: [0, 8],
@@ -54,13 +54,13 @@ export function defaultParams(): GlassParams {
     highlightThreshold: 0.35,
     highlightHeight: 10,
     highlightSoftness: 0.5,
-    highlightIntensity: 0.6,
+    highlightIntensity: 0,
 
     shadowAmount: 10,
     shadowInvHeight: 1 / 20,
     shadowOffset: [0, 0.004],
     shadowInvRadius: 1 / 26,
-    shadowOpacity: 0.45,
+    shadowOpacity: 0,
     shadowContribution: 0.5,
     shadowDistOffset: 6,
 
@@ -109,6 +109,10 @@ export function defaultParams(): GlassParams {
     blurFillLightenOpacity: 0,
     blurFillDarkenOpacity: 0,
     blurFillNormalOpacity: 0,
+
+    // Pixel-denominated params were fitted at a 240x150 panel, so
+    // min(halfSize) = 75. Everything in pixels scales from here.
+    scaleRef: 75,
   };
 }
 
