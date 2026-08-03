@@ -211,8 +211,19 @@ container decide how many SDF unions to run instead of merging unconditionally.
 subtle on purpose — past roughly 4% the squish reads as a bounce rather than a
 press.
 
-### Still missing
+### Motion-linked specular
 
-Motion-linked specular (iOS tilts the highlight with the device) is not
-implemented; it needs a live attitude source rather than anything decodable from
-the shader.
+On handhelds Apple tilts the specular with device attitude. That is not a gap in
+this library: it is a *parameter feed*, not a mechanism. `lightDir` is already
+exposed — drive it from CoreMotion or the sensor API of your choice and the
+highlight tracks the device.
+
+Desktops have no attitude to read, so on web and WinUI the fixed `lightDir` is
+the correct behaviour, not a limitation.
+
+### Mechanism coverage
+
+Complete. Material, adaptive tint, diffusion, morphing, scroll edge, vibrancy
+roles, concentric radii, group splitting, press state — every mechanism decoded
+from macOS 26/27 is implemented, and the macOS 27 constants are verified
+identical to 26 by direct comparison against the live 27 filesystem.
