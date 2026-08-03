@@ -461,8 +461,15 @@ vec4 sampleBackdrop(vec2 uv, float radius)
 // producing an effective blur radius.
 float blurRampRadius(float dist, float blurScale, float uScaleFactor)
 {
-    vec3 lo   = uBlurDist.yzw;
-    vec3 hi   = vec3(uBlurDist.x, uBlurDist.y, uBlurDist.z);
+    // lo/hi were transposed: lo took .yzw (8,20,40) and hi took .xyz (0,8,20),
+    // so hi < lo and every span was negative. Deep inside the shape all three
+    // ramps then saturated, leaving (blurAlpha.x - 0.9) = 0.1 of the radius --
+    // a 45px blur collapsed to ~2px in the panel CENTRE while the rim kept the
+    // full amount. Backwards: the interior is the frosted part. Measured with
+    // probeGlass({splitAt}) -- a hard backdrop edge crossed in ~8px instead of
+    // being erased.
+    vec3 lo   = vec3(uBlurDist.x, uBlurDist.y, uBlurDist.z);
+    vec3 hi   = uBlurDist.yzw;
     vec3 span = hi - lo;
     // Guard degenerate spans without vector comparison operators (not valid in
     // GLSL 330 / ES 3.0): step() gives 1.0 where |span| <= TINY.
