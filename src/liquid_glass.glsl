@@ -244,6 +244,24 @@ BIND(1) uniform GlassParams {
  float uAdaptiveTintDark;  // content luma to use over a BRIGHT backdrop
  float uAdaptiveTintLight; // content luma to use over a DARK backdrop
 
+// ---- material grade -------------------------------------------------------
+// saturation and the tint come from the recipe layer; reduce-transparency is
+// the accessibility path (platformChrome*ReduceTransparency drops blurRadius
+// and sets averageColorEnabled, i.e. the backdrop collapses to its average).
+ float uSaturation;          // recipe `saturation`; 0 = unset, treated as no-op
+ float uTintAmount;          // Glass.tint(_:) / NSGlassEffectView.tintColor
+ float uReduceTransparency;  // 1 = average colour instead of the blur
+// ---- interactive press ----------------------------------------------------
+// Glass.interactive(_:) / NSGlassEffectView.effectIsInteractive. Apple's
+// interactive glass COMPRESSES under a press and its rim lights up; both ride
+// the same ramp so it reads as the material yielding, not as a fade. These two
+// fill the std140 pads either side of uTintColor, so the block does not grow.
+// 0 means "unset" for the scale and is treated as 1.0, because unset uniform
+// fields arrive zero-filled and a 0 scale would collapse the shape.
+ float uPressScale;          // 147  (pad before the vec3)
+ vec3  uTintColor;
+ float uPressGlint;          // 151  (pad after the vec3)
+
 };
 
 // Rec.709 luma. Decoded verbatim from tile_average_luma's fp16 immediates
@@ -346,6 +364,45 @@ float adaptiveLumaCurve(float L) {
 float adaptiveContentLuma(float avgLuma) {
     return mix(uAdaptiveTintLight, uAdaptiveTintDark,
                smoothstep(0.35, 0.65, adaptiveLumaCurve(avgLuma)));
+}
+
+// Average backdrop COLOUR (the luma helper above returns only its luminance).
+vec3 backdropAverageColor(sampler2D tex) {
+    vec2  sz  = vec2(textureSize(tex, 0));
+    float top = floor(log2(max(sz.x, sz.y)));
+    return textureLod(tex, vec2(0.5), top).rgb;
+}
+
+// The chameleon, applied to the PANEL. Note the glass recipe ships no
+// luminanceAmount, so uAdaptiveAmount is 0 for platformContentGlass and this is
+// a no-op there: the lift that keeps a dark backdrop legible is already the
+// colour matrix's +0.235 bias, and applying the curve here too double-counts it
+// and washes the panel out to mid-grey. The curve's real job is CONTENT colour
+// — see adaptiveContentLuma above. Kept because the legacy CoreMaterial
+// recipes (platformContent*, platformChrome*, dock, platters) DO ship a
+// luminanceAmount and drive this.
+vec3 applyAdaptiveLuminosity(vec3 c, float avgLuma, float amount) {
+    if (amount <= 0.0) return c;
+    float target = adaptiveLumaCurve(avgLuma);
+    float L      = dot(c, LUMA709);
+    return mix(c, c * (target / max(L, EPS)), clamp(amount, 0.0, 1.0));
+}
+
+// Recipe `saturation`. 0 means the caller never set it, so it is a no-op rather
+// than a full desaturation — unset uniform fields arrive zero-filled.
+vec3 applySaturation(vec3 c, float s) {
+    if (s <= 0.0) return c;
+    return mix(vec3(dot(c, LUMA709)), c, s);
+}
+
+// Glass.tint(_:) — moves chroma toward the tint at constant luminance, which is
+// what "tint the background and glass effect toward" a colour has to mean if
+// the panel is to stay translucent.
+vec3 applyTint(vec3 c, vec3 tint, float amount) {
+    if (amount <= 0.0) return c;
+    float L  = dot(c, LUMA709);
+    float tL = max(dot(tint, LUMA709), EPS);
+    return mix(c, tint * (L / tL), clamp(amount, 0.0, 1.0));
 }
 
 // One-pixel analytic antialiasing. Resolution independent, no AA texture, no
@@ -602,7 +659,8 @@ void main()
 
     // Grow into place: 96% -> 100% of final size. Subtle on purpose; more than
     // a few percent reads as a zoom rather than as material forming.
-    vec2  animHalf = uHalfSize * mix(0.96, 1.0, diffusionCurve(d01, 0.8));
+    float pressScale = (uPressScale > 0.0) ? uPressScale : 1.0;
+    vec2  animHalf = uHalfSize * mix(0.96, 1.0, diffusionCurve(d01, 0.8)) * pressScale;
 
     // Pixels -> normalized UV. Every displacement below is authored in pixels.
     vec2 texel = 1.0 / vec2(textureSize(uBackdrop, 0));
@@ -720,7 +778,19 @@ void main()
         faceCol = vec4(acc, aberrAlpha);
     }
 
-    vec3 face = gradeUnpremultiplied(faceCol, uFaceCM0, uFaceCM1, uFaceCM2) * (uFaceOpacity * dBody);
+    vec3  avgColor = backdropAverageColor(uBackdrop);
+    float avgLuma  = dot(avgColor, LUMA709);
+
+    if (uReduceTransparency > 0.0) {
+        faceCol.rgb = mix(faceCol.rgb, avgColor * max(faceCol.a, TINY),
+                          clamp(uReduceTransparency, 0.0, 1.0));
+    }
+
+    vec3 faceGraded = gradeUnpremultiplied(faceCol, uFaceCM0, uFaceCM1, uFaceCM2);
+    faceGraded = applyAdaptiveLuminosity(faceGraded, avgLuma, uAdaptiveAmount);
+    faceGraded = applySaturation(faceGraded, uSaturation);
+    faceGraded = applyTint(faceGraded, uTintColor, uTintAmount);
+    vec3 face  = faceGraded * (uFaceOpacity * dBody);
 
     // ---- edge bleed -------------------------------------------------------
     // Wider blur, sampled only within a band near the rim, tinted separately and
@@ -836,10 +906,11 @@ void main()
     // ---- outer rim glint, POST-coverage -----------------------------------
     // Premultiplied by nothing and added on top: emissive, so it must not be
     // attenuated by coverage. Fitted gain/falloff — see the uniform block.
-    if (uRimGlintGain > 0.0) {
+    float glintGain = uRimGlintGain * ((uPressGlint > 0.0) ? uPressGlint : 1.0);
+    if (glintGain > 0.0) {
         float glint = exp(-abs(dist) / max(uRimGlintTau * S, EPS))
                     * step(dist, 2.0) * dBody;
-        rgb += vec3(glint * uRimGlintGain / max(coverage, 0.25));
+        rgb += vec3(glint * glintGain / max(coverage, 0.25));
     }
 
     fragColor = vec4(rgb, coverage);

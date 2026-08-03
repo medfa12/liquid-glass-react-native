@@ -111,3 +111,10 @@ export function isLiquidGlassAvailable(): boolean {
 }
 export * from './params27.generated';
 export * from './ui.generated';
+
+// Apple's Glass value type + GlassEffectContainer semantics.
+export { Glass, adaptiveLumaCurve, adaptiveContentLuma, clearDimAlpha,
+         systemGlassState, applySystemState, GLASS_RECIPE, LUMA709 as GLASS_LUMA709 } from './glass';
+export type { SystemGlassState } from './glass';
+export { GlassEffectContainer, GlassEffectTransition, edgeGap } from './container';
+export type { Rect } from './container';

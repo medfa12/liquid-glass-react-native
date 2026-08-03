@@ -117,6 +117,16 @@ export function defaultParams(): GlassParams {
     luminanceValues: [0.8, 0.9, 1.1, 0.825],
     adaptiveTintDark: 0.12,
     adaptiveTintLight: 0.95,
+    // Material grade. Zeros are deliberate "unset" sentinels: the glass recipe
+    // ships no saturation and no tint, and the shader treats 0 as a no-op
+    // rather than as full desaturation / an untinted-to-black panel.
+    saturation: 0,
+    tintAmount: 0,
+    tintColor: [1, 1, 1],
+    reduceTransparency: 0,
+    // Interactive press. 0 scale means "unset"; the shader reads it as 1.0.
+    pressScale: 0,
+    pressGlint: 0,
   };
 }
 
