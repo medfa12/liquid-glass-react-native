@@ -122,18 +122,36 @@ foreground-only, as two angle floats), and the HDR path shrank —
 Reference budget: 21 texture samples, 9 mip selects, 6 lens-curve sqrts,
 2 fwidth, 2 discards.
 
-### What is and is not macOS 27 here
+### macOS 27 constants: verified, not assumed
 
-**Structure and math: macOS 27's, transcribed.** The 66-field block, the field
-names, the pipeline order, the variant scheme.
+An earlier revision of this file said the default constants were "still macOS
+26's" because 27's material recipes sit on the encrypted IPSW volume. That gap
+is now closed, and the answer is that **there was no gap**.
 
-**Default constants: still macOS 26's.** macOS 27's material recipes live on the
-**encrypted** IPSW volume. The decryption key is published by Apple
-(`wkms-public.apple.com/fcs-keys/...`) and ECDH against it yields a valid shared
-secret, but the final key-unwrap was not solved here — blacktop's `ipsw`
-(`pkg/aea`) implements it. And a macOS 26 host **cannot** boot a 27 guest to
-read them live: Virtualization.framework refuses, because a host cannot
-virtualise a guest newer than itself.
+macOS 27's filesystem was read without booting it. `tart create --from-ipsw`
+writes the restored volume to `~/.tart/tmp/<uuid>/disk.img` *before* the boot
+step that fails on a macOS 26 host, so the image can be mounted read-only and
+read directly:
 
-So this is a mechanism-complete macOS 27 port with macOS-26-fitted values. That
-is a values gap, not a missing effect.
+```sh
+hdiutil attach -readonly -nobrowse   -imagekey diskimage-class=CRawDiskImage ~/.tart/tmp/<uuid>/disk.img
+# -> /Volumes/Macintosh HD 1   ProductVersion 27.0
+```
+
+Result, from the live macOS 27 volume:
+
+| | |
+|---|---|
+| `platformContentGlass.materialrecipe` | **identical to macOS 26** — same colour matrix, same `blurRadius: 45` |
+| recipe files overall | 57 identical, 5 changed, 0 new, 0 removed |
+| the 5 changes | all unrelated to glass: `moduleFill` gained `moduleRuleOnDarkSubtle`; four `~appletv` files moved `plusL`/`plusD` to `…IgnoreAlpha` |
+| `luminanceColorMap.png` | pixel-identical (`cmp` flags it, but that is PNG metadata) — same logistic k=10.25 centred at 0.500, range 0.349..0.800 |
+| glass entry points in the full 157 MB metallib | 36, matching the cryptex slice that was decoded |
+
+So the constants here are macOS 27's, confirmed by direct comparison rather than
+carried forward on assumption.
+
+**What remains out of reach** is a *rendered* macOS 27 fidelity fit:
+Virtualization.framework will not boot a guest newer than its host, so macOS 27
+cannot be made to draw glass on a macOS 26 machine. That mattered only while the
+constants were unknown; they are now known to be unchanged.
