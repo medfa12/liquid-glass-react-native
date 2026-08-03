@@ -341,12 +341,16 @@ export function adaptiveContentLuma(avgLuma: number, dark = 0.12, light = 0.95):
   return light + (dark - light) * (s * s * (3 - 2 * s));
 }
 
-/** Average Rec.709 luma of an image, for driving the two helpers above. */
-export function averageLuma(src: HTMLCanvasElement | HTMLImageElement): number {
-  const c = document.createElement('canvas');
-  c.width = 1; c.height = 1;
-  const ctx = c.getContext('2d')!;
-  ctx.drawImage(src as CanvasImageSource, 0, 0, 1, 1);
-  const d = ctx.getImageData(0, 0, 1, 1).data;
-  return (d[0] * LUMA709[0] + d[1] * LUMA709[1] + d[2] * LUMA709[2]) / 255;
+/**
+ * Average Rec.709 luma over an RGBA byte array. React Native has no DOM, so
+ * the caller supplies pixels from wherever it has them (an image decode, a
+ * captured frame, a solid colour).
+ */
+export function averageLumaFromRGBA(pixels: ArrayLike<number>): number {
+  let sum = 0, n = 0;
+  for (let i = 0; i + 3 < pixels.length; i += 4) {
+    sum += (pixels[i] * LUMA709[0] + pixels[i + 1] * LUMA709[1] + pixels[i + 2] * LUMA709[2]) / 255;
+    n++;
+  }
+  return n ? sum / n : 0;
 }

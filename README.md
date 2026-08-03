@@ -92,3 +92,48 @@ of more tuning:
 2. macOS 27's material recipes live on the **encrypted** IPSW volume, so the
    three subsystems added in 27 (ring shadow, key fill highlight, blur fill)
    have no ground truth to fit against; their values are modelled, not measured.
+
+## macOS 27
+
+A second shader targeting macOS 27 (build 26A5388g) ships alongside the 26 one:
+`liquid_glass_27.glsl`, with `params27` bindings. It is not the 26 shader with
+features bolted on — it follows macOS 27's own structure, transcribed from the
+disassembly of `glass_background_all_lpf` (1527 lines, the only variant that
+reads all 63 uniforms).
+
+**Two structural changes from 26:**
+
+1. **Order of operations is inverted.** macOS 26 shades the face and layers the
+   shadow on top. **27 computes shadow and ring shadow first**, then shades the
+   face over them — so the face colour matrix operates on a surface that already
+   carries the shadow.
+
+2. **Runtime bools became compile-time variants.** 12 entry points became 36:
+   `glass_background_{minimal,c,e,r,ce,cr,re,all}`. `complex_refraction` is gone
+   from the struct entirely; the decision moved into the shader name. Reproduced
+   with `LG_R` / `LG_E` / `LG_C` — all 8 combinations build. Worth adopting at
+   any version: it removes per-fragment branching.
+
+Also in 27: `aberration_dir` is a `vec2` in the **background** struct (26 had it
+foreground-only, as two angle floats), and the HDR path shrank —
+`clamp_limit`, `preserve_hue` and `sdr_white_value` are gone, leaving
+`holding_tone_opacity` with a single `sdr_shadow_dist0` / `sdr_shadow_inv` pair.
+
+Reference budget: 21 texture samples, 9 mip selects, 6 lens-curve sqrts,
+2 fwidth, 2 discards.
+
+### What is and is not macOS 27 here
+
+**Structure and math: macOS 27's, transcribed.** The 66-field block, the field
+names, the pipeline order, the variant scheme.
+
+**Default constants: still macOS 26's.** macOS 27's material recipes live on the
+**encrypted** IPSW volume. The decryption key is published by Apple
+(`wkms-public.apple.com/fcs-keys/...`) and ECDH against it yields a valid shared
+secret, but the final key-unwrap was not solved here — blacktop's `ipsw`
+(`pkg/aea`) implements it. And a macOS 26 host **cannot** boot a 27 guest to
+read them live: Virtualization.framework refuses, because a host cannot
+virtualise a guest newer than itself.
+
+So this is a mechanism-complete macOS 27 port with macOS-26-fitted values. That
+is a values gap, not a missing effect.
