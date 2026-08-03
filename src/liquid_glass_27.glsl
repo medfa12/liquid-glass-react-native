@@ -167,8 +167,19 @@ vec4 tap(vec2 uv, float radius) {
 
 // 4-point piecewise-linear ramp: distance -> blur radius.
 float blurRamp(float d, float S) {
-    vec3 lo = vec3(blur_dist1, blur_dist2, blur_dist3);
-    vec3 hi = vec3(blur_dist0, blur_dist1, blur_dist2);
+    // Same transposition as the 26 port: lo took dist1..3 (8,20,40) and hi took
+    // dist0..2 (0,8,20), so hi < lo, every span was negative, and deep inside
+    // the shape all three ramps saturated -- leaving (alpha0 - 0.9) = 0.1 of the
+    // radius in the panel CENTRE. Measured on the 26 path with probeGlass: a
+    // hard backdrop edge crossed in ~8px under a nominal 45px blur.
+    //
+    // CAVEAT, because this matters for fidelity claims: the DEFECT is measured,
+    // but the FIX is not uniquely determined. Transposing lo/hi here and
+    // reversing the blur_dist order in the preset are observationally identical.
+    // I have not re-read the disassembly to see which one Apple actually has, so
+    // treat the orientation as fitted, not decoded.
+    vec3 lo = vec3(blur_dist0, blur_dist1, blur_dist2);
+    vec3 hi = vec3(blur_dist1, blur_dist2, blur_dist3);
     vec3 sp = hi - lo;
     vec3 inv = 1.0 / mix(sp, vec3(TINY), step(abs(sp), vec3(TINY)));
     vec3 t = clamp((vec3(d) - lo) * inv, 0.0, 1.0);
