@@ -147,6 +147,13 @@ export class GlassEffectContainer {
       for (let j = i + 1; j < items.length; j++) {
         const [, A] = items[i], [, B] = items[j];
         const sameUnion = A.unionId != null && A.unionId === B.unionId;
+        // ToolbarSpacer(.flexible/.fixed) decides whether toolbar items share one
+        // glass capsule or split into separate ones. Modelled as a section: a
+        // spacer starts a new section, and effects in different sections never
+        // merge however close they sit. An explicit union id still wins, which
+        // matches glassEffectUnion overriding layout proximity.
+        if (!sameUnion && A.section != null && B.section != null
+            && A.section !== B.section) continue;
         // NSGlassEffectContainerView merges descendants "if the views are
         // sufficiently similar AND within the proximity specified in spacing".
         // Proximity alone would fuse a tinted panel into an untinted one.
