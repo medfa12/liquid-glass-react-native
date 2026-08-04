@@ -132,6 +132,9 @@ export function defaultParams(): GlassParams {
     pressPoint: [0, 0],
     pressLight: 0,
     pressLightRadius: 46,
+    // Drag deformation: velocity in shape-local px (Y up). 0 = rigid.
+    dragVec: [0, 0],
+    dragStretch: 0.05,
   };
 }
 

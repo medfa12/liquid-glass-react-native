@@ -272,6 +272,19 @@ BIND(1) uniform GlassParams {
  float uPressLight;          // 154  intensity; 0 = off
  float uPressLightRadius;    // 155
 
+// ---- drag deformation -----------------------------------------------------
+// Glass that is being dragged stretches along its direction of travel and
+// narrows across it, then relaxes when it stops. Every other effect in this
+// shader is a parameter on a fixed shape; this one deforms the DOMAIN the SDF
+// is evaluated in, which is the only way to get a shape that is no longer the
+// shape you asked for.
+//
+// Area is roughly preserved: elongate by `k` along the motion axis and narrow
+// by sqrt(k) across it, so the glass reads as a body of fluid being pulled
+// rather than simply scaled up.
+ vec2  uDragVec;             // 156  velocity, px per frame, shape-local (Y up)
+ float uDragStretch;         // 158  px -> elongation gain; 0 = rigid
+
 };
 
 // Rec.709 luma. Decoded verbatim from tile_average_luma's fp16 immediates
@@ -426,6 +439,21 @@ vec3 applyPressLight(vec3 c, vec2 p, float dist) {
     f *= f;                                   // tighter core, softer skirt
     f *= step(dist, 0.0);                     // inside the shape only
     return c + vec3(f * uPressLight);
+}
+
+
+// Deform the sample point by the drag. Applied to `p` BEFORE the SDF, so every
+// downstream term -- refraction, rim, shadow, highlight -- follows the deformed
+// silhouette instead of tracing the original one through a stretched body.
+vec2 dragDeform(vec2 p) {
+    float sp = length(uDragVec);
+    if (uDragStretch <= 0.0 || sp < EPS) return p;
+    vec2  d = uDragVec / sp;
+    float k = 1.0 + min(sp * uDragStretch, 0.5);   // capped: past ~1.5x it tears
+    vec2  n = vec2(-d.y, d.x);
+    float along = dot(p, d) / k;                   // divide -> shape elongates
+    float perp  = dot(p, n) * sqrt(k);             // multiply -> shape narrows
+    return d * along + n * perp;
 }
 
 // One-pixel analytic antialiasing. Resolution independent, no AA texture, no
@@ -702,7 +730,7 @@ void main()
 
     float dist;
     vec2  normal;
-    supercircleSDF(vUV, animHalf, uExponent, dist, normal);
+    supercircleSDF(dragDeform(vUV), animHalf, uExponent, dist, normal);
 
     // Merge the second shape in before ANY shading happens. Everything
     // downstream — refraction, bleed, shadow, highlight — then operates on one
@@ -714,7 +742,7 @@ void main()
         vec4 sh = (i == 0) ? uShape2 : ((i == 1) ? uShape3 : uShape4);
         float d2;
         vec2  n2;
-        supercircleSDF(vUV - sh.xy, sh.zw * mix(0.96, 1.0, d01),
+        supercircleSDF(dragDeform(vUV) - sh.xy, sh.zw * mix(0.96, 1.0, d01),
                        uExponent, d2, n2);
         smoothUnion(dist, normal, d2, n2, uMergeK, dist, normal);
     }

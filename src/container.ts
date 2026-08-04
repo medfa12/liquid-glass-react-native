@@ -84,7 +84,11 @@ export class GlassEffectContainer {
     // ramp's origin each time so `born` never climbed off zero.
     const bornAt = out ? null : (prev?.bornAt ?? null);
     this.leaving.delete(id);
-    this.effects.set(id, { diffusion: 1, unionId: null, ...e, born, bornAt });
+    // px/py/vel must survive the per-frame set() for the same reason bornAt
+    // does: replacing the entry wholesale resets the motion history and the
+    // measured velocity is always zero.
+    this.effects.set(id, { diffusion: 1, unionId: null, ...e, born, bornAt,
+                           px: prev?.px, py: prev?.py, vel: prev?.vel });
     return this;
   }
 
@@ -191,6 +195,7 @@ export class GlassEffectContainer {
    */
   render(canvas: { w: number; h: number }, base: Record<string, any>, toBackdropRect: (r: Rect) => number[], dtMs = 16, nowMs = 0) {
     this._now = nowMs;
+    this.measureVelocity();
     this.tick(dtMs, nowMs);
     let drawn = 0;
     for (const group of this.groups()) {
@@ -228,6 +233,12 @@ export class GlassEffectContainer {
     // them. So spacing governs which effects are grouped and animated
     // together; the meniscus itself only appears much closer in.
     p.mergeK = this.spacing;
+
+    // Drag: velocity from the rect delta between frames, in shape-local px with
+    // Y up to match vUV. Smoothed so a single jumpy frame does not snap the
+    // shape, and decayed so it relaxes when motion stops.
+    p.dragVec = primary.vel || [0, 0];
+    p.dragStretch = primary.glass?.dragStretch ?? 0.05;
 
     // HIG > Color: "Liquid Glass appears more opaque in larger elements like
     // sidebars to preserve legibility over complex backgrounds and accommodate
