@@ -127,6 +127,11 @@ export function defaultParams(): GlassParams {
     // Interactive press. 0 scale means "unset"; the shader reads it as 1.0.
     pressScale: 0,
     pressGlint: 0,
+    // Positional press light: the contact point, in shape-local px (vUV space,
+    // origin centre, Y up). 0 radius means unset; the shader skips it.
+    pressPoint: [0, 0],
+    pressLight: 0,
+    pressLightRadius: 46,
   };
 }
 
