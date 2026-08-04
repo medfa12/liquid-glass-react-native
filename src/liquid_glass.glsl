@@ -262,6 +262,16 @@ BIND(1) uniform GlassParams {
  vec3  uTintColor;
  float uPressGlint;          // 151  (pad after the vec3)
 
+// ---- positional press light -----------------------------------------------
+// The rim glint above lifts the WHOLE edge uniformly, which is not what a press
+// looks like. Apple lights the glass AT the contact point -- pronounced under a
+// finger on iOS, subtler under a pointer on macOS -- and it falls off radially.
+// uPressPoint is in shape-local pixels (same space as vUV), so it works for a
+// click, a touch, or a drag that moves while held.
+ vec2  uPressPoint;          // 152
+ float uPressLight;          // 154  intensity; 0 = off
+ float uPressLightRadius;    // 155
+
 };
 
 // Rec.709 luma. Decoded verbatim from tile_average_luma's fp16 immediates
@@ -403,6 +413,19 @@ vec3 applyTint(vec3 c, vec3 tint, float amount) {
     float L  = dot(c, LUMA709);
     float tL = max(dot(tint, LUMA709), EPS);
     return mix(c, tint * (L / tL), clamp(amount, 0.0, 1.0));
+}
+
+
+// Radial lift at the contact point. Squared falloff, clamped to the shape so a
+// press near the rim does not bleed outside the glass.
+vec3 applyPressLight(vec3 c, vec2 p, float dist) {
+    if (uPressLight <= 0.0) return c;
+    float r = max(uPressLightRadius, EPS);
+    float d = length(p - uPressPoint) / r;
+    float f = clamp(1.0 - d * d, 0.0, 1.0);
+    f *= f;                                   // tighter core, softer skirt
+    f *= step(dist, 0.0);                     // inside the shape only
+    return c + vec3(f * uPressLight);
 }
 
 // One-pixel analytic antialiasing. Resolution independent, no AA texture, no
@@ -797,6 +820,7 @@ void main()
     faceGraded = applyAdaptiveLuminosity(faceGraded, avgLuma, uAdaptiveAmount);
     faceGraded = applySaturation(faceGraded, uSaturation);
     faceGraded = applyTint(faceGraded, uTintColor, uTintAmount);
+    faceGraded = applyPressLight(faceGraded, vUV, dist);
     vec3 face  = faceGraded * (uFaceOpacity * dBody);
 
     // ---- edge bleed -------------------------------------------------------
