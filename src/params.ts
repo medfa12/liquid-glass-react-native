@@ -131,7 +131,7 @@ export function defaultParams(): GlassParams {
     // origin centre, Y up). 0 radius means unset; the shader skips it.
     pressPoint: [0, 0],
     pressLight: 0,
-    pressLightRadius: 46,
+    pressLightRadius: 160,
     // Drag deformation: velocity in shape-local px (Y up). 0 = rigid.
     dragVec: [0, 0],
     dragStretch: 0.05,

@@ -40,9 +40,15 @@ export function adaptiveContentLuma(avgLuma: number, dark = 0.12, light = 0.95):
 // description: "highly translucent ... allows color to pass through from
 // background to foreground". Less bias so the backdrop is not lifted, RGB left
 // near identity so hue passes, and a shorter blur so detail survives.
-const CLEAR_CM = [[0.97, -0.09, -0.01, 0.055],
-                  [-0.03, 0.93, -0.01, 0.055],
-                  [-0.03, -0.09, 0.99, 0.055]];
+// DECODED — least-squares solve of a real NSGlassEffectView style=.clear on
+// macOS 27.0 (26A5388g) over a known test pattern; max residual 0.0016 (~0.4/255).
+// Dark and light appearance differ materially (mainly bias + luma weights).
+const CLEAR_CM_DARK  = [[0.8297, -0.0967, -0.0183, 0.0967],
+                        [-0.0493, 0.7821, -0.0179, 0.0965],
+                        [-0.0496, -0.0967, 0.8611, 0.0967]];
+const CLEAR_CM_LIGHT = [[0.8557, -0.1618, -0.0167, 0.2795],
+                        [-0.0481, 0.7419, -0.0167, 0.2795],
+                        [-0.0481, -0.1618, 0.8870, 0.2795]];
 
 const BASE = {
   adaptiveAmount: 0,          // DECODED: the glass recipe ships no luminanceAmount
@@ -145,9 +151,11 @@ Glass.regular = new Glass({
   ...BASE, ...GLASS_RECIPE, variant: 'regular', isInteractive: false,
 });
 
+// DECODED: clear blurs MORE than regular, not less — measured edge-transition
+// sigma 19.6px vs regular's 13.9px, a 1.41x ratio -> 45 * 1.41 ~= 63.
 Glass.clear = new Glass({
   ...BASE, variant: 'clear', isInteractive: false,
-  blurRadius: 18, faceCM: CLEAR_CM,
+  blurRadius: 63, faceCM: CLEAR_CM_DARK, faceCMLight: CLEAR_CM_LIGHT,
 });
 
 // Glass.identity — "your content remains unaffected as if no glass effect was
