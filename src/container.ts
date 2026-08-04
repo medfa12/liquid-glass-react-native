@@ -120,12 +120,17 @@ export class GlassEffectContainer {
     for (const [, e] of this.effects) {
       if (e.transition === 'identity') { e.born = 1; continue; }
       if (e.bornAt == null || e.bornAt === undefined) e.bornAt = now;
-      e.born = Math.min(1, (now - e.bornAt) / D);
+      // Materialize-in, decoded: smooth ease with a brief ~3% overshoot before
+      // settling, which the shader turns into the >1.0 scale blip Apple shows.
+      const bt = Math.min(1, (now - e.bornAt) / D);
+      const es = bt * bt * (3 - 2 * bt);
+      e.born = bt >= 1 ? 1 : es * (1 + 0.06 * Math.sin(bt * Math.PI));
     }
     for (const [id, e] of this.leaving) {
       if (e.transition === 'identity') { this.leaving.delete(id); continue; }
       const t = Math.min(1, (now - e.leftAt) / D);
-      e.diffusion = e.leftFrom * (1 - t);
+      const es = t * t * (3 - 2 * t);           // dissolve-out: plain ease
+      e.diffusion = e.leftFrom * (1 - es);
       if (t >= 1) this.leaving.delete(id);
     }
   }

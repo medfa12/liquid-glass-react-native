@@ -764,7 +764,7 @@ void main()
         vec4 sh = (i == 0) ? uShape2 : ((i == 1) ? uShape3 : uShape4);
         float d2;
         vec2  n2;
-        supercircleSDF(dragDeform(vUV) - sh.xy, sh.zw * mix(0.96, 1.0, d01),
+        supercircleSDF(dragDeform(vUV) - sh.xy, sh.zw * mix(0.40, 1.0, d01),
                        uExponent, d2, n2);
         smoothUnion(dist, normal, d2, n2, uMergeK, dist, normal);
     }
