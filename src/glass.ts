@@ -17,6 +17,22 @@ export const GLASS_RECIPE = {
            [-0.079, -0.265, 0.973, 0.235]],
 };
 
+// MEASURED — diffing our render against a real darkAqua NSGlassEffectView over
+// an identical backdrop showed our glass a uniform +32 luma too bright
+// (MAE 32.05, mean delta +32.0 — the two being equal means a pure offset, not
+// noise). platformContentGlass ships ONE matrix, but a real view does not use
+// the same bias in both appearances: the decoded clear variant measured bias
+// 0.0966 dark vs 0.2795 light, a ratio of 0.346. Applying that ratio to the
+// regular bias gives 0.235 * 0.346 = 0.0813, which removes the offset.
+// The RGB terms are unchanged; only the additive bias differs.
+const DARK_BIAS = 0.0813;
+export const GLASS_RECIPE_DARK = {
+  blurRadius: 45,
+  faceCM: [[0.921, -0.265, -0.027, DARK_BIAS],
+           [-0.079, 0.735, -0.027, DARK_BIAS],
+           [-0.079, -0.265, 0.973, DARK_BIAS]],
+};
+
 // DECODED — luminanceColorMap.png as a closed form. Drives CONTENT colour, not
 // the panel: this is the curve that decides whether symbols go light or dark.
 const LUM_LO = 0.3490, LUM_HI = 0.8000, LUM_K = 10.25, LUM_MID = 0.5;
@@ -147,8 +163,16 @@ export class Glass {
   }
 }
 
+// React Native has no matchMedia; callers pass the appearance in via
+// applySystemState/systemGlassState (Appearance.getColorScheme()).
+const _mm = (globalThis as any).matchMedia;
+const _prefersDark = typeof _mm === 'function' &&
+  !!_mm('(prefers-color-scheme: dark)').matches;
+
 Glass.regular = new Glass({
-  ...BASE, ...GLASS_RECIPE, variant: 'regular', isInteractive: false,
+  ...BASE, ...(_prefersDark ? GLASS_RECIPE_DARK : GLASS_RECIPE),
+  variant: 'regular', isInteractive: false,
+  faceCMLight: GLASS_RECIPE.faceCM, faceCMDark: GLASS_RECIPE_DARK.faceCM,
 });
 
 // DECODED: clear blurs MORE than regular, not less — measured edge-transition
