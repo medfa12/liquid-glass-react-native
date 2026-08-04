@@ -285,6 +285,18 @@ BIND(1) uniform GlassParams {
  vec2  uDragVec;             // 156  velocity, px per frame, shape-local (Y up)
  float uDragStretch;         // 158  px -> elongation gain; 0 = rigid
 
+// ---- edge contour (macOS 27) ----------------------------------------------
+// Measured off a real macOS 27 glass tile, scanning across its left edge:
+//
+//   backdrop luma 34 | ONE pixel at luma 15 | glass interior luma 57
+//
+// The boundary is a thin line DARKER than both the backdrop and the material --
+// a contact contour, not the bright stroke I had assumed. It is what gives the
+// panel its crisp separation from whatever is behind it. Without it the glass
+// dissolves into the backdrop at the rim, which is exactly how ours looked.
+ float uEdgeLineOpacity;     // 159  0 = off; ~0.74 matches the measurement
+ float uEdgeLineWidth;       // 160  px, ~1.0
+
 };
 
 // Rec.709 luma. Decoded verbatim from tile_average_luma's fp16 immediates
@@ -454,6 +466,16 @@ vec2 dragDeform(vec2 p) {
     float along = dot(p, d) / k;                   // divide -> shape elongates
     float perp  = dot(p, n) * sqrt(k);             // multiply -> shape narrows
     return d * along + n * perp;
+}
+
+
+// The dark contact contour at the silhouette. Centred ON the boundary and
+// applied after coverage so it is not eaten by the edge antialiasing.
+vec3 applyEdgeLine(vec3 rgb, float dist) {
+    if (uEdgeLineOpacity <= 0.0) return rgb;
+    float w = max(uEdgeLineWidth, 0.5);
+    float f = 1.0 - smoothstep(0.0, w, abs(dist));
+    return rgb * (1.0 - f * clamp(uEdgeLineOpacity, 0.0, 1.0));
 }
 
 // One-pixel analytic antialiasing. Resolution independent, no AA texture, no
@@ -972,5 +994,6 @@ void main()
         rgb += vec3(glint * glintGain / max(coverage, 0.25));
     }
 
+    rgb = applyEdgeLine(rgb, dist);
     fragColor = vec4(rgb, coverage);
 }

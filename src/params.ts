@@ -135,6 +135,8 @@ export function defaultParams(): GlassParams {
     // Drag deformation: velocity in shape-local px (Y up). 0 = rigid.
     dragVec: [0, 0],
     dragStretch: 0.05,
+    edgeLineOpacity: 0.74,
+    edgeLineWidth: 1.0,
   };
 }
 

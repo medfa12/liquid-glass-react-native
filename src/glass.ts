@@ -53,6 +53,10 @@ const BASE = {
   tintAmount: 0,
   tintColor: [1, 1, 1],
   reduceTransparency: 0,
+  // macOS 27 edge contour. Measured: interior luma 57 -> boundary luma 15, a
+  // factor of 0.26, so the darkening is 1 - 0.26 = 0.74 over roughly one pixel.
+  edgeLineOpacity: 0.74,
+  edgeLineWidth: 1.0,
 };
 
 /**
@@ -121,6 +125,8 @@ export class Glass {
       tintAmount: this.tintAmount,
       tintColor: this.tintColor,
       reduceTransparency: this.reduceTransparency,
+      edgeLineOpacity: this.edgeLineOpacity ?? 0,
+      edgeLineWidth: this.edgeLineWidth ?? 1,
       // 0 is "unset" for the scale; the shader reads that as 1.0.
       pressScale: this.pressScale ?? 0,
       pressGlint: this.pressGlint ?? 0,
